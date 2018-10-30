@@ -761,25 +761,29 @@ class _EcdhEs(_RawKeyMgmt, JWAAlgorithm):
 
     def wrap(self, key, bitsize, cek, headers):
         self._check_key(key)
+        derivedKeySize = None
+        unwrappedKeySize = None
         if self.keysize is None:
+            derivedKeySize = bitSize
             if cek is not None:
                 raise InvalidJWEOperation('ECDH-ES cannot use an existing CEK')
             alg = headers['enc']
         else:
-            bitsize = self.keysize
+            derivedKeySize = self.keysize
+            unwrappedKeySize = bitsize
             alg = headers['alg']
 
         epk = JWK.generate(kty=key.key_type, crv=key.key_curve)
         dk = self._derive(epk.get_op_key('unwrapKey'),
                           key.get_op_key('wrapKey'),
-                          alg, bitsize, headers)
+                          alg, derivedKeySize, headers)
 
         if self.keysize is None:
             ret = {'cek': dk}
         else:
-            aeskw = self.aeskwmap[bitsize]()
+            aeskw = self.aeskwmap[derivedKeySize]()
             kek = JWK(kty="oct", use="enc", k=base64url_encode(dk))
-            ret = aeskw.wrap(kek, bitsize, cek, headers)
+            ret = aeskw.wrap(kek, unwrappedKeySize, cek, headers)
 
         ret['header'] = {'epk': json_decode(epk.export_public())}
         return ret
@@ -788,22 +792,26 @@ class _EcdhEs(_RawKeyMgmt, JWAAlgorithm):
         if 'epk' not in headers:
             raise ValueError('Invalid Header, missing "epk" parameter')
         self._check_key(key)
+        derivedKeySize = None
+        unwrappedKeySize = None
         if self.keysize is None:
+            derivedKeySize = bitsize
             alg = headers['enc']
         else:
-            bitsize = self.keysize
+            derivedKeySize = self.keysize
+            unwrappedKeySize = bitsize
             alg = headers['alg']
 
         epk = JWK(**headers['epk'])
         dk = self._derive(key.get_op_key('unwrapKey'),
                           epk.get_op_key('wrapKey'),
-                          alg, bitsize, headers)
+                          alg, derivedKeySize, headers)
         if self.keysize is None:
             return dk
         else:
-            aeskw = self.aeskwmap[bitsize]()
+            aeskw = self.aeskwmap[derivedKeySize]()
             kek = JWK(kty="oct", use="enc", k=base64url_encode(dk))
-            cek = aeskw.unwrap(kek, bitsize, ek, headers)
+            cek = aeskw.unwrap(kek, unwrappedKeySize, ek, headers)
             return cek
 
 
